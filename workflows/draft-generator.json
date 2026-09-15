@@ -1,0 +1,197 @@
+{
+  "name": "TrendHub - Draft Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["callback_query", "message"],
+        "additionalFields": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000001",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nlet action = 'draft';\nlet target = '';\n\nif (item.callback_query) {\n  const data = item.callback_query.data || '';\n  const parts = data.split(':');\n  action = parts[0] === 'skip' ? 'skip' : 'draft';\n  target = parts.slice(1).join(':');\n} else {\n  const text = (item.message && item.message.text) || '';\n  const match = text.match(/github\\.com\\/([^\\s\\/]+)\\/([^\\s\\/?]+)/);\n  target = match ? `${match[1]}/${match[2]}` : '';\n  action = target ? 'draft' : 'skip';\n}\n\nconst [owner, repo] = target.split('/');\nconst chatId =\n  (item.callback_query && item.callback_query.message && item.callback_query.message.chat.id) ||\n  (item.message && item.message.chat.id) ||\n  null;\n\nreturn [{ json: { action, owner, repo, target, chatId } }];"
+      },
+      "id": "b2000000-0000-4000-8000-000000000002",
+      "name": "Extract Repo Target",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "skip",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "skip"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "draft",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "draft"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "b2000000-0000-4000-8000-000000000003",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "Skipped ❌"
+      },
+      "id": "b2000000-0000-4000-8000-000000000004",
+      "name": "Send Ack",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [660, -160],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "Processing repo... ⏳"
+      },
+      "id": "b2000000-0000-4000-8000-000000000005",
+      "name": "Send Status Ack",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [660, 160],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $json.owner }}/{{ $json.repo }}/readme",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/vnd.github.raw" },
+            { "name": "User-Agent", "value": "trendhub-bot" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000006",
+      "name": "Fetch Repo & Readme",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={{ $env.GEMINI_API_KEY }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: 'You write crisp, high-engagement LinkedIn posts in a curator/newsletter style.\\nAnalyze this GitHub repository metadata and README, then produce a ready-to-post draft.\\n\\nRepo: https://github.com/' + $('Extract Repo Target').item.json.owner + '/' + $('Extract Repo Target').item.json.repo + '\\nLanguage: Unknown\\nDescription: N/A\\nREADME (excerpt):\\n' + String($json.data || '').slice(0, 8000) + '\\n\\nFormat requirements:\\n1. Hook line: 1 punchy sentence highlighting what problem it solves.\\n2. Summary (2-3 sentences): What it is and why it was built.\\n3. Key features & what it does (3-4 concise bullet points).\\n4. Why developers care (1 punchy takeaway).\\n5. Call to action + repo link: https://github.com/' + $('Extract Repo Target').item.json.owner + '/' + $('Extract Repo Target').item.json.repo + '\\n6. 3-5 relevant hashtags.\\n\\nTone: informative, direct, developer-focused, no corporate buzzwords or excessive hype.' }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 1000 } }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000007",
+      "name": "Call Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 160]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Extract Repo Target').item.json.chatId }}",
+        "text": "={{ $json.candidates[0].content.parts[0].text }}",
+        "additionalFields": { "appendAttribution": false }
+      },
+      "id": "b2000000-0000-4000-8000-000000000008",
+      "name": "Send Draft to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1320, 160],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "Extract Repo Target", "type": "main", "index": 0 }]]
+    },
+    "Extract Repo Target": {
+      "main": [[{ "node": "Route Action", "type": "main", "index": 0 }]]
+    },
+    "Route Action": {
+      "main": [
+        [{ "node": "Send Ack", "type": "main", "index": 0 }],
+        [{ "node": "Send Status Ack", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send Status Ack": {
+      "main": [[{ "node": "Fetch Repo & Readme", "type": "main", "index": 0 }]]
+    },
+    "Fetch Repo & Readme": {
+      "main": [[{ "node": "Call Gemini API", "type": "main", "index": 0 }]]
+    },
+    "Call Gemini API": {
+      "main": [[{ "node": "Send Draft to Telegram", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "trendhub-draft-generator"
+  }
+}

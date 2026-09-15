@@ -1,0 +1,104 @@
+{
+  "name": "TrendHub - Daily Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cron",
+              "expression": "0 8 */2 * *"
+            }
+          ]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://github.com/trending?since=daily",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Fetch Trending HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Embedded copy of src/scraper.js parseTrending.\nfunction parseTrending(html, limit = 3) {\n  const repos = [];\n  const articleRegex = /<article class=\"Box-row\">([\\s\\S]*?)<\\/article>/g;\n  let match;\n\n  while ((match = articleRegex.exec(html)) !== null && repos.length < limit) {\n    const block = match[1];\n\n    const repoMatch = /href=\"\\/([a-zA-Z0-9_.-]+)\\/([a-zA-Z0-9_.-]+)\"/.exec(block);\n    if (!repoMatch) continue;\n    const owner = repoMatch[1];\n    const repo = repoMatch[2];\n\n    const descMatch = /<p class=\"[^\"]*col-9[^\"]*\">([\\s\\S]*?)<\\/p>/.exec(block);\n    const rawDesc = descMatch ? descMatch[1].replace(/\\s+/g, ' ').trim() : 'No description provided.';\n    const whatItIs = decodeHtml(rawDesc);\n\n    const langMatch = /itemprop=\"programmingLanguage\">([^<]+)<\\/span>/.exec(block);\n    const language = langMatch ? langMatch[1].trim() : 'Unknown';\n\n    const starsTodayMatch = /([0-9,]+)\\s+stars today/.exec(block);\n    const starsToday = starsTodayMatch ? starsTodayMatch[1].replace(/,/g, '') : 'N/A';\n\n    const totalStarsMatch = /\\/stargazers\">[\\s]*([0-9,]+)[\\s]*<\\/a>/.exec(block);\n    const totalStars = totalStarsMatch ? totalStarsMatch[1].replace(/,/g, '') : 'N/A';\n\n    const truncatedFocus = whatItIs.length > 100 ? `${whatItIs.slice(0, 100)}...` : whatItIs;\n    const whatItDoes = [\n      `Primary focus: ${truncatedFocus}`,\n      `Built with ${language}, gaining ${starsToday} stars today`\n    ];\n\n    repos.push({ owner, repo, language, starsToday, totalStars, whatItIs, whatItDoes });\n  }\n\n  return repos;\n}\n\nfunction decodeHtml(value) {\n  return value\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;/g, \"'\")\n    .replace(/&nbsp;/g, ' ')\n    .replace(/<[^>]*>/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction formatTelegramCard(repoInfo, index) {\n  const bullets = repoInfo.whatItDoes.map(bullet => `• ${bullet}`).join('\\n');\n  return `🔥 Trending #${index}: ${repoInfo.owner}/${repoInfo.repo}\\n⭐ ${repoInfo.starsToday} stars today | 🌐 ${repoInfo.language}\\n\\n📌 What it is:\\n${repoInfo.whatItIs}\\n\\n⚡ What it does:\\n${bullets}\\n\\n🔗 https://github.com/${repoInfo.owner}/${repoInfo.repo}`;\n}\n\nconst html = $input.first().json.data || '';\nconst repos = parseTrending(html, 3);\n\nreturn repos.map((repoInfo, i) => ({\n  json: {\n    ...repoInfo,\n    index: i + 1,\n    text: formatTelegramCard(repoInfo, i + 1),\n    reply_markup: {\n      inline_keyboard: [\n        [\n          { text: '✅ Draft Post', callback_data: `draft:${repoInfo.owner}/${repoInfo.repo}` },\n          { text: '❌ Skip', callback_data: `skip:${repoInfo.owner}/${repoInfo.repo}` }\n        ]\n      ]\n    }\n  }\n}));"
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Parse Top 3 Repos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "reply_markup": "={{ JSON.stringify($json.reply_markup) }}"
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Send Telegram Cards",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [880, 0],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [[{ "node": "Fetch Trending HTML", "type": "main", "index": 0 }]]
+    },
+    "Fetch Trending HTML": {
+      "main": [[{ "node": "Parse Top 3 Repos", "type": "main", "index": 0 }]]
+    },
+    "Parse Top 3 Repos": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "Split In Batches": {
+      "main": [[{ "node": "Send Telegram Cards", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "trendhub-daily-digest"
+  }
+}

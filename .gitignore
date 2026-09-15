@@ -1,0 +1,8 @@
+node_modules/
+worker/node_modules/
+.superpowers/
+.env
+.dev.vars
+graphify-out/
+docs/superpowers/
+CLAUDE.md
