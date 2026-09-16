@@ -1,12 +1,13 @@
 # TrendHub
 
-GitHub Trending → Telegram digest → LinkedIn draft. Every 2 days at 08:00 UTC, or paste any `github.com/owner/repo` link — overview with stars + language, then `✅ Draft Post` / `❌ Skip`.
+GitHub Trending → Telegram digest → LinkedIn draft. Every 2 days at 08:00 UTC (daily trending) plus 1st + 15th at 08:00 UTC (monthly trending, last 30 days), or paste any `github.com/owner/repo` link — overview with stars + language, then `✅ Draft Post` / `❌ Skip`. Repos already Drafted or Skipped are remembered and excluded from future digests — paste the link yourself to bypass.
 
 ## Stack (all free)
 
 | Component | Service | Notes |
 |-----------|---------|-------|
-| Runner | Cloudflare Workers | Cron `0 8 */2 * *` + `POST /webhook`, 100k req/day, sleeps idle |
+| Runner | Cloudflare Workers | Cron `0 8 */2 * *` (daily) + `0 8 1,15 * *` (monthly) + `POST /webhook`, 100k req/day, sleeps idle |
+| State | Cloudflare KV (`TRENDHUB_STATE`) | Tracks Drafted/Skipped repos, excluded from future digests |
 | Alt runner | n8n (`workflows/*.json`) | Self-hosted free, Cloud trial |
 | Messaging | Telegram Bot API | `@BotFather`, inline keyboards |
 | Data | GitHub API / scraper | Trending + `README.md` (8K chars) |
@@ -39,7 +40,7 @@ npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put GITHUB_TOKEN  # optional
 curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://trendhub-worker.<you>.workers.dev/webhook"
 ```
-Cron fires automatically. Check: `npx wrangler tail`.
+Crons fire automatically. Check: `npx wrangler tail`.
 
 ### 4b. n8n alternative
 1. n8n Cloud → Credentials → Telegram → paste BotFather token → Save as `Telegram Bot`.
@@ -50,6 +51,7 @@ Cron fires automatically. Check: `npx wrangler tail`.
 - Digest: 3 Telegram messages, each repo with stars/language + overview + `✅ Draft Post` / `❌ Skip`.
 - Trigger draft: click `✅ Draft Post` or paste `https://github.com/owner/repo`.
 - Flow: `Processing … ⏳` → Gemini summary → LinkedIn draft posted to same chat.
+- Clicking `✅ Draft Post` or `❌ Skip` marks that repo seen in KV — won't reappear in future digests. Pasting the link manually always works, seen or not.
 
 ## Verify
 ```bash

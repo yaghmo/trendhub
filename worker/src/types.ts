@@ -3,7 +3,7 @@ export type Env = {
   TELEGRAM_CHAT_ID: string;
   GEMINI_API_KEY: string;
   GITHUB_TOKEN?: string;
-  TRENDHUB_STATE?: { get(k: string): Promise<string | null>; put(k: string, v: string): Promise<void> };
+  TRENDHUB_STATE: { get(k: string): Promise<string | null>; put(k: string, v: string): Promise<void> };
 };
 
 export type RepoResult = {

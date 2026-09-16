@@ -4,8 +4,14 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-15",
   "triggers": {
-    "crons": ["0 8 */2 * *"]
+    "crons": ["0 8 */2 * *", "0 8 1,15 * *"]
   },
+  "kv_namespaces": [
+    {
+      "binding": "TRENDHUB_STATE",
+      "id": "6052e3958c9d4e379261e2d0e8ac8fe5"
+    }
+  ],
   "observability": {
     "enabled": true
   }

@@ -20,18 +20,34 @@ export default {
     return new Response("Not found", { status: 404 });
   },
 
-  async scheduled(_event: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
-    ctx.waitUntil(runDigest(env));
+  async scheduled(event: { cron: string }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
+    const monthly = event.cron === "0 8 1,15 * *";
+    ctx.waitUntil(runDigest(env, monthly));
   },
 };
 
-async function runDigest(env: Env): Promise<void> {
-  const res = await fetch(GITHUB_TRENDING, {
+function seenKey(owner: string, repo: string): string {
+  return `seen:${owner}/${repo}`;
+}
+
+async function markSeen(env: Env, owner: string, repo: string): Promise<void> {
+  await env.TRENDHUB_STATE.put(seenKey(owner, repo), String(Date.now()));
+}
+
+async function runDigest(env: Env, monthly: boolean): Promise<void> {
+  const res = await fetch(monthly ? "https://github.com/trending?since=monthly" : GITHUB_TRENDING, {
     headers: { "user-agent": "trendhub-worker/1.0" },
   });
   if (!res.ok) throw new Error(`trending fetch ${res.status}`);
   const html = await res.text();
-  const repos = parseTrending(html, 3);
+  const candidates = parseTrending(html, 10);
+
+  const repos = [];
+  for (const c of candidates) {
+    if (repos.length >= 3) break;
+    if (await env.TRENDHUB_STATE.get(seenKey(c.owner, c.repo))) continue;
+    repos.push(c);
+  }
 
   for (let i = 0; i < repos.length; i++) {
     const overview = await generateOverview(repos[i].owner, repos[i].repo, env);
@@ -70,6 +86,8 @@ async function handleUpdate(update: TelegramUpdate, env: Env): Promise<void> {
     await answerCallbackQuery(env, { callbackQueryId: cb.id });
 
     if (data.startsWith("skip:")) {
+      const [owner, repo] = data.slice(5).split("/");
+      if (owner && repo) await markSeen(env, owner, repo);
       await sendTelegram(env, { chatId, text: `Skipped ${data.slice(5)}.` });
       return;
     }
@@ -78,6 +96,7 @@ async function handleUpdate(update: TelegramUpdate, env: Env): Promise<void> {
       const slug = data.slice(6);
       const [owner, repo] = slug.split("/");
       if (!owner || !repo) return;
+      await markSeen(env, owner, repo);
       await sendTelegram(env, { chatId, text: `Processing ${owner}/${repo} ⏳` });
       const draft = await generateDraft(owner, repo, env);
       await sendTelegram(env, { chatId, text: draft });
