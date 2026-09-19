@@ -1,12 +1,12 @@
 # TrendHub
 
-GitHub Trending → Telegram digest → LinkedIn draft. Every 2 days at 08:00 UTC (daily trending) plus 1st + 15th at 08:00 UTC (monthly trending, last 30 days), or paste any `github.com/owner/repo` link — overview with stars + language, then `✅ Draft Post` / `❌ Skip`. Repos already Drafted or Skipped are remembered and excluded from future digests — paste the link yourself to bypass.
+GitHub Trending → Telegram digest → LinkedIn draft. Every 3 days at 08:00 UTC (top 2 weekly trending) plus 1st + 15th at 08:00 UTC (top 3 monthly trending), or paste any `github.com/owner/repo` link — overview with stars + language, then `✅ Draft Post` / `❌ Skip`. Repos already sent, Drafted or Skipped are remembered and excluded from future digests — paste the link yourself to bypass.
 
 ## Stack (all free)
 
 | Component | Service | Notes |
 |-----------|---------|-------|
-| Runner | Cloudflare Workers | Cron `0 8 */2 * *` (daily) + `0 8 1,15 * *` (monthly) + `POST /webhook`, 100k req/day, sleeps idle |
+| Runner | Cloudflare Workers | Cron `0 8 */3 * *` (weekly, 2 repos) + `0 8 1,15 * *` (monthly, 3 repos) + `POST /webhook`, 100k req/day, sleeps idle |
 | State | Cloudflare KV (`TRENDHUB_STATE`) | Tracks Drafted/Skipped repos, excluded from future digests |
 | Alt runner | n8n (`workflows/*.json`) | Self-hosted free, Cloud trial |
 | Messaging | Telegram Bot API | `@BotFather`, inline keyboards |

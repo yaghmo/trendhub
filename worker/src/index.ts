@@ -3,8 +3,9 @@ import { buildOverviewPayload, buildGeminiPayload, extractGeminiText } from "./p
 import { sendTelegram, answerCallbackQuery, editMessageReplyMarkup } from "./telegram.js";
 import type { Env, TelegramUpdate } from "./types.js";
 
-const GITHUB_TRENDING = "https://github.com/trending?since=daily";
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
+
+const MONTHLY_CRON = "0 8 1,15 * *";
 
 export default {
   async fetch(request: Request, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
@@ -21,8 +22,9 @@ export default {
   },
 
   async scheduled(event: { cron: string }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
-    const monthly = event.cron === "0 8 1,15 * *";
-    ctx.waitUntil(runDigest(env, monthly));
+    // 1st + 15th: top 3 monthly. Every 3 days: top 2 weekly.
+    const monthly = event.cron === MONTHLY_CRON;
+    ctx.waitUntil(runDigest(env, monthly ? "monthly" : "weekly", monthly ? 3 : 2));
   },
 };
 
@@ -34,17 +36,17 @@ async function markSeen(env: Env, owner: string, repo: string): Promise<void> {
   await env.TRENDHUB_STATE.put(seenKey(owner, repo), String(Date.now()));
 }
 
-async function runDigest(env: Env, monthly: boolean): Promise<void> {
-  const res = await fetch(monthly ? "https://github.com/trending?since=monthly" : GITHUB_TRENDING, {
+async function runDigest(env: Env, since: "weekly" | "monthly", count: number): Promise<void> {
+  const res = await fetch(`https://github.com/trending?since=${since}`, {
     headers: { "user-agent": "trendhub-worker/1.0" },
   });
   if (!res.ok) throw new Error(`trending fetch ${res.status}`);
   const html = await res.text();
-  const candidates = parseTrending(html, 10);
+  const candidates = parseTrending(html, 25);
 
   const repos = [];
   for (const c of candidates) {
-    if (repos.length >= 3) break;
+    if (repos.length >= count) break;
     if (await env.TRENDHUB_STATE.get(seenKey(c.owner, c.repo))) continue;
     repos.push(c);
   }
@@ -63,6 +65,8 @@ async function runDigest(env: Env, monthly: boolean): Promise<void> {
         ],
       },
     });
+    // Sent = seen, so an ignored digest never repeats.
+    await markSeen(env, repos[i].owner, repos[i].repo);
   }
 }
 
