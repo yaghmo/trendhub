@@ -2,6 +2,10 @@
 
 GitHub Trending → Telegram digest → LinkedIn draft. Every 3 days at 08:00 UTC (top 2 weekly trending) plus 1st + 15th at 08:00 UTC (top 3 monthly trending), or paste any `github.com/owner/repo` link — overview with stars + language, then `✅ Draft Post` / `❌ Skip`. Repos already sent, Drafted or Skipped are remembered and excluded from future digests — paste the link yourself to bypass.
 
+[![TrendHub demo](docs/media/trendhub-demo.gif)](docs/media/trendhub-demo.mp4)
+
+*Demo (19 s). Click for the full video with sound.*
+
 ## Stack (all free)
 
 | Component | Service | Notes |
